@@ -20,8 +20,19 @@ Options:
     --source-ref REF    Branch to mirror (default: HEAD)
     --since DEV:PUB     Override watermark as dev_sha:pub_sha (both local)
     --public-remote URL Override public repo URL
+    --resync            Publish paths the allowlist newly allows, as ONE new
+                        commit on top of public HEAD (fast-forward, no rewrite)
     --force             Force-push (use after rebase / history rewrite)
     --verbose           Print one line per commit
+
+Allowlist changes need --resync:
+  An incremental run applies only the paths each new commit *touched*, so
+  widening release/public-paths.txt (e.g. removing a deny) publishes nothing
+  for files that did not also change in that commit -- the public tree would
+  silently keep only a fragment of the newly-allowed subtree. `--resync`
+  rebuilds the full filtered tree at the source ref and commits the difference
+  in one go. `--force` (full replay from root) also fixes it, but rewrites
+  every public SHA.
 """
 
 from __future__ import annotations
@@ -551,6 +562,11 @@ def main() -> int:
     parser.add_argument("--source-ref", default=DEFAULT_SOURCE_REF)
     parser.add_argument("--since", metavar="DEV:PUB", help="Override watermark (dev_sha:pub_sha, both local)")
     parser.add_argument("--public-remote", default=DEFAULT_PUBLIC_REMOTE)
+    parser.add_argument(
+        "--resync",
+        action="store_true",
+        help="Rebuild the full filtered tree and publish it as one fast-forward commit",
+    )
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
@@ -577,6 +593,41 @@ def main() -> int:
             print("No watermark -- mirroring full history (force-push).")
         else:
             watermark_dev, initial_pub_parent = wm
+
+    # Allowlist widened? A per-commit diff replay cannot see files that became
+    # public without changing, so rebuild the whole filtered tree once and land
+    # the difference as a single commit on top of the existing public HEAD --
+    # a fast-forward, unlike --force's full-history replay.
+    if args.resync:
+        if initial_pub_parent is None:
+            print("ERROR: --resync needs an existing public HEAD (no watermark found).", file=sys.stderr)
+            return 1
+        index_path = Path(tempfile.mktemp(prefix="lemoncrow-mirror-index-"))
+        lfs_oids: set[str] = set()
+        try:
+            filtered_tree = build_filtered_tree_full(dev_tip, public_prefixes, index_path, lfs_oids)
+        finally:
+            if index_path.exists():
+                index_path.unlink()
+        if filtered_tree == git("rev-parse", f"{initial_pub_parent}^{{tree}}"):
+            print("Public tree already matches the allowlist; nothing to resync.")
+            return 0
+        meta = get_commit_metadata(dev_tip)
+        meta["message"] = (
+            "mirror: resync public tree with release/public-paths.txt\n\n"
+            "Publishes every path the allowlist now allows. Incremental mirroring\n"
+            "only applies the paths each commit touched, so files that became\n"
+            "public without changing were missing from the public tree.\n"
+        )
+        new_sha = create_filtered_commit(filtered_tree, [initial_pub_parent], meta)
+        if lfs_oids:
+            print(f"Found {len(lfs_oids)} LFS object(s) referenced by the resynced tree.")
+            ensure_lfs_objects_cached(lfs_oids)
+        push_to_public(remote_url, new_sha, force=False, dry_run=args.dry_run)
+        push_lfs_objects(remote_url, lfs_oids, dry_run=args.dry_run)
+        set_watermark(dev_tip, new_sha, dry_run=args.dry_run)
+        print(f"Done. Resynced full tree. Public HEAD: {new_sha[:12]}")
+        return 0
 
     # Collect commits
     if fresh:
