@@ -172,6 +172,7 @@ is derived from implied hit rates, not confirmed in their docs.
 Cursor stores no local cache counters, so every hit
 rate is computed as 1 − billed/integral. Treat the caching mechanism as
 unproven; the CLI cost delta above is from Usage/token totals on the pinned run.
+
 ## Quick start
 
 The [two lines at the top](#lemoncrow-runtime) are the whole setup: the installer
@@ -445,8 +446,6 @@ It runs locally: files on your machine, no server, no seats.
 
 **Hosted LemonCrow is a separate, paid product** and is not in this repository:
 team workspaces shared across machines, shared context and memory, SSO, org-wide
-usage dashboards, retention and audit export, and support. The runtime stays
-open source — the service is what's sold. Interested, or want it run for you?
-Contact <legal@lemoncrow.com>.
+usage dashboards, retention and audit export, and support. For details Contact <legal@lemoncrow.com>.
 
 See [LICENSE](LICENSE) and [NOTICE](NOTICE).
