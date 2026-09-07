@@ -11,9 +11,8 @@ retrieval moat: the ~0.67 vs commodity ~0.4 gap comes from the channel
 architecture in engine._search_symbols_local (exact-name channels, IDF-pruned
 discriminative FTS, multi-channel candidate generation), which is NOT here.
 
-Published in full like the rest of the engine (PolyForm Noncommercial; see
-``src/lemoncrow/pro/LICENSE``) — it is cheap tuning, not what defends the
-product.
+Published in full like the rest of the engine — it is cheap tuning, not what
+defends the product.
 """
 
 from __future__ import annotations

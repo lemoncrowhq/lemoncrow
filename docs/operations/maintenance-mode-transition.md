@@ -473,18 +473,21 @@ hygiene, docs) proceeds regardless of these answers.
    `NOTICE`, update the `pyproject.toml` license string, and produce
    `docs/licensing-report.md` for the record.
 
-### 5.2 Amendment (2026-09-07) — Step E executed, with a split license
+### 5.2 Step E executed (2026-09-07)
 
-Decision 1 stands (the `pro` source is published; the mirror deny and the
-`hatch_build` IP-leak guard are gone), but decision 3 is **amended**: `pro/` is
-not Apache-2.0. The repository is now licensed by directory —
+Decisions 1 and 3 both stand, as written: the `pro` source is published in the
+mirror under Apache-2.0, the `!src/lemoncrow/pro` deny is gone, and the
+`hatch_build` IP-leak guard is removed (the remaining wheel check only rejects a
+`.so`/`.py` twin). The whole repository is Apache-2.0 and builds from public
+source.
 
-- everything except `src/lemoncrow/pro/`: **Apache-2.0** (`LICENSE-APACHE`);
-- `src/lemoncrow/pro/`: **PolyForm Noncommercial 1.0.0**
-  (`src/lemoncrow/pro/LICENSE`) — noncommercial use free, commercial use
-  requires a separate license from the maintainer.
+A split license (Apache-2.0 + PolyForm Noncommercial on `pro/`) was briefly
+shipped and reverted the same day — protecting against a commercial fork was
+judged not worth excluding every commercial adopter at this stage. Tighten
+future releases if that ever changes; see `docs/legal/licensing.md`.
 
-SPDX for the distribution: `Apache-2.0 AND PolyForm-Noncommercial-1.0.0`. The
-project as a whole is therefore source-available, not OSI open source; say so
-plainly in any public description. See `docs/legal/licensing.md` and
-`docs/legal/licensing-report.md`.
+One mechanical lesson, now fixed in `scripts/mirror.py`: widening the allowlist
+publishes nothing on its own. Incremental mirroring applies only the paths each
+commit touched, so removing a deny needs `make mirror ARGS="--resync"` (full
+filtered-tree rebuild as one fast-forward commit) or `--force` (full replay,
+rewrites public history).

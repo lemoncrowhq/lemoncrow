@@ -1,10 +1,9 @@
 """Public data + interface contract for the code-context engine.
 
-Licensing boundary: these are the SHARED types the Apache-2.0 surface and the
+Layering boundary: these are the SHARED types the public trust surface and the
 ``lemoncrow.pro`` engine exchange — data *schemas* and the provider Protocol,
-not algorithms. Keeping them here lets Apache-2.0 code depend on the contract
-without depending on the engine implementation, which is source-available under
-PolyForm Noncommercial 1.0.0 (``src/lemoncrow/pro/LICENSE``).
+not algorithms. Keeping them here lets the rest of the runtime depend on the
+contract without depending on the engine implementation.
 
 The Pro modules ``lemoncrow.pro.capabilities.code_context.{models, call_graph,
 intel_store}`` re-export these names, so existing imports keep working.

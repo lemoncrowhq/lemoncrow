@@ -162,9 +162,8 @@ def store(tmp_path: Path) -> StoreBundle:
 
 # --- Engine availability ----------------------------------------------------
 # The engine is the entire ``src/lemoncrow/pro/`` package. Its source is
-# published (Apache-2.0 everywhere else; ``pro`` itself is PolyForm
-# Noncommercial — see src/lemoncrow/pro/LICENSE) and present in every checkout,
-# so every test runs against the real modules and nothing below fires.
+# published (Apache-2.0, like the rest of the tree) and present in every
+# checkout, so every test runs against the real modules and nothing below fires.
 #
 # The guard below is a defensive net for an install that lacks the engine
 # entirely (e.g. a wheel built with ``pro`` stripped): pro-importing test

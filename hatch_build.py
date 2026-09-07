@@ -335,9 +335,8 @@ def _assert_no_duplicate_source(artifact_path: str, require_compiled: bool = Fal
 
     Uncompilable modules (pydantic/click/FastAPI/hook scripts, and any
     ``lemoncrow/pro`` module mypyc cannot handle) have no ``.so`` and
-    legitimately ship as ``.py``. Every tree is published source, so a ``.py``
-    in the wheel is never a leak -- ``src/lemoncrow/pro`` simply carries its own
-    PolyForm Noncommercial license (``src/lemoncrow/pro/LICENSE``).
+    legitimately ship as ``.py``. The whole tree is Apache-2.0 published source,
+    so a ``.py`` in the wheel is never a leak.
 
     When *require_compiled* is set (the caller expected a mypyc build, i.e.
     ``LEMONCROW_ENABLE_MYPYC=1``), a wheel with NO ``.so`` is itself a failure:
@@ -417,12 +416,11 @@ def _find_compilable(lemoncrow_src: pathlib.Path, src_dir: pathlib.Path) -> list
         result.append(rel)
     if pro_uncompilable:
         details = "\n".join(f"  - {rel}  [{why}]" for rel, why in pro_uncompilable)
-        # Published engine: an uncompilable pro module simply ships as .py, under
-        # its own PolyForm Noncommercial license. Nothing is hidden, so this is a
-        # perf note, not a release blocker.
+        # Open-source engine: an uncompilable pro module simply ships as (open)
+        # .py. Nothing is hidden, so this is a perf note, not a release blocker.
         print(
             "[hatch-mypyc] these lemoncrow/pro modules are not mypyc-compilable and "
-            f"will ship as .py (PolyForm Noncommercial):\n{details}",
+            f"will ship as .py (open source):\n{details}",
             flush=True,
         )
     return result

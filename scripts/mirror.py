@@ -58,9 +58,7 @@ DEV_REMOTE = "origin"  # lemoncrow-dev -- where the watermark refs live
 PUBLIC_PATH_REWRITES = ((".github/public-workflows", ".github/workflows"),)
 
 # The whole source tree is mirrored, `pro` engine included -- the public repo
-# builds from source with no proprietary component. `src/lemoncrow/pro` is
-# published under the PolyForm Noncommercial License 1.0.0 rather than
-# Apache-2.0 (see src/lemoncrow/pro/LICENSE); the rest stays Apache-2.0.
+# builds from source with no proprietary component, all of it Apache-2.0.
 # Release wheels are still built from this repo (.github/workflows/release.yml)
 # and cross-published to the public repo's Releases, optionally mypyc-compiled
 # for performance (see hatch_build.py).

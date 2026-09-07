@@ -41,8 +41,8 @@ def test_plain_allowlist_unchanged() -> None:
 
 # --- What the real allowlist would publish -----------------------------------
 # `src/` is allowed wholesale, so nothing under it is protected by a deny any
-# more (the `!src/lemoncrow/pro` deny is gone: the engine is published under
-# PolyForm Noncommercial). These two tests are the replacement guard -- they run
+# more (the `!src/lemoncrow/pro` deny is gone: the engine is published,
+# Apache-2.0). These two tests are the replacement guard -- they run
 # the REAL release/public-paths.txt over the REAL tracked tree, so a new private
 # directory or a committed credential fails here instead of on GitHub.
 
@@ -105,8 +105,8 @@ def test_no_credentials_in_the_files_the_mirror_would_publish() -> None:
     """Committed key material must never be inside the public allowlist.
 
     Replaces the wheel-side guard that used to keep `lemoncrow/pro` source out of
-    releases: the engine is public on purpose now, so the thing worth guarding is
-    credentials, not source.
+    releases: the engine is open source on purpose now, so the thing worth
+    guarding is credentials, not source.
     """
     hits = subprocess.run(
         ["git", "grep", "-lIE", _SECRET_RE, "HEAD", "--", "."],

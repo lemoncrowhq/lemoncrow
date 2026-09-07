@@ -1,36 +1,25 @@
 # Licensing report
 
-Prepared for the maintenance-mode / source-publication transition. This records
-the licensing position after publishing the engine source under a split license.
+Prepared for the maintenance-mode / open-source transition. This records the
+licensing position after relicensing the whole project to Apache-2.0.
 
 ## 1. Project license
 
-- **Everything except `src/lemoncrow/pro/`: Apache-2.0.** Full text:
-  `LICENSE-APACHE`; summary: `LICENSE`; attribution notice: `NOTICE`.
-- **`src/lemoncrow/pro/` (the engine): PolyForm Noncommercial License 1.0.0.**
-  Full text: `src/lemoncrow/pro/LICENSE`. Noncommercial use is free; commercial
-  use requires a separate commercial license from the maintainer.
-- SPDX for the distribution as a whole:
-  `Apache-2.0 AND PolyForm-Noncommercial-1.0.0`.
-- Previously the project was "open-core": Apache-2.0 source plus a
-  compiled-only, unpublished `lemoncrow.pro` engine. The engine source is now
-  published in full; the restriction is contractual (noncommercial), not
-  technical. Nothing is withheld and no proprietary binary is required to build
-  or run LemonCrow.
-- Consequence to state honestly: the project as a whole is **not** OSI open
-  source. The Apache-2.0 portion is; the engine directory is source-available.
-  Distro packaging (Debian, Fedora, nixpkgs, Homebrew core) will decline the
-  engine on that basis.
+- **LemonCrow: Apache-2.0** in its entirety, including the `lemoncrow.pro`
+  engine. Full text: `LICENSE-APACHE`; summary: `LICENSE`; attribution notice:
+  `NOTICE`.
+- Previously the project was "open-core": Apache-2.0 source plus a proprietary,
+  compiled-only `lemoncrow.pro` engine. That split has been removed — the engine
+  source is now published and Apache-2.0 licensed.
 
 ## 2. Contributor terms
 
-- `CONTRIBUTING.md` states contributions are accepted under the license already
-  covering the files touched (Apache-2.0, or PolyForm Noncommercial for
-  `src/lemoncrow/pro/`).
+- `CONTRIBUTING.md` states contributions are under Apache-2.0.
 - `CLA.md` (Contributor License Agreement) additionally grants the maintainer
-  broad relicensing rights — required here, since the maintainer offers
-  commercial licenses for the engine. **Keep the CLA as-is:** a DCO alone would
-  not support commercial relicensing of contributed engine code.
+  broad relicensing rights. **Owner review recommended:** with the project now
+  fully Apache-2.0, decide whether the CLA's relicensing clause should be
+  narrowed to match the OSS positioning (it is not required for Apache-2.0, and
+  a DCO sign-off is a lighter alternative).
 
 ## 3. Bundled / vendored code
 
