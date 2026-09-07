@@ -1,13 +1,26 @@
 # Licensing
 
-LemonCrow is open source under the **Apache License, Version 2.0**, in its
-entirety. The runtime, the CLI, the MCP server, the SDK, host integrations, and
-the engine (the `lemoncrow.pro` package) are all published as readable source
-under the same license. There is no open-core split and no proprietary
-component.
+LemonCrow publishes **all** of its source. It is licensed by directory:
 
-- Full license text: [`/LICENSE`](../../LICENSE) and [`/LICENSE-APACHE`](../../LICENSE-APACHE)
+| Path | License | Commercial use |
+| --- | --- | --- |
+| everything except `src/lemoncrow/pro/` | Apache-2.0 | allowed |
+| `src/lemoncrow/pro/` (the engine) | PolyForm Noncommercial 1.0.0 | separate license required |
+
+The runtime, the CLI, the MCP server, the SDK, and host integrations are open
+source under the Apache License, Version 2.0. The engine — code intelligence,
+retrieval, prompt compilation, memory, routing, and verification — is
+**source-available**: readable, buildable, and free for any noncommercial
+purpose (personal use, study, research, hobby projects, education, charities,
+public research, government), but commercial use needs a separate license.
+
+There is no proprietary binary component: the whole repository builds and runs
+from source.
+
+- Full license terms: [`/LICENSE`](../../LICENSE), [`/LICENSE-APACHE`](../../LICENSE-APACHE),
+  [`/src/lemoncrow/pro/LICENSE`](../../src/lemoncrow/pro/LICENSE)
 - Attribution and third-party notices: [`/NOTICE`](../../NOTICE)
+- SPDX for the distribution as a whole: `Apache-2.0 AND PolyForm-Noncommercial-1.0.0`
 
 ## No account, no entitlement gate
 

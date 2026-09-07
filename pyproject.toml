@@ -20,11 +20,15 @@ version = "0.7.1"
 description = "Context and execution runtime for coding agents — code intelligence, bounded tools, durable memory, and verification."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
-license = { text = "Apache-2.0" }
+# Split license: Apache-2.0 for the whole tree EXCEPT src/lemoncrow/pro, which is
+# PolyForm Noncommercial 1.0.0 (src/lemoncrow/pro/LICENSE). See /LICENSE.
+license = { text = "Apache-2.0 AND PolyForm-Noncommercial-1.0.0" }
 authors = [{ name = "LemonCrow" }]
 
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
+    # src/lemoncrow/pro is source-available under PolyForm Noncommercial 1.0.0.
+    "License :: Other/Proprietary License",
 ]
 
 dependencies = [
@@ -135,6 +139,8 @@ packages = ["src/lemoncrow"]
 [tool.hatch.build.targets.wheel.force-include]
 "src/lemoncrow/core/service/telemetry/frustration_lexicon.yaml" = "lemoncrow/core/service/telemetry/frustration_lexicon.yaml"
 "src/lemoncrow/pro/capabilities/code_context/explore_reranker_model.json" = "lemoncrow/pro/capabilities/code_context/explore_reranker_model.json"
+# The engine's own license must travel with the engine in every wheel.
+"src/lemoncrow/pro/LICENSE" = "lemoncrow/pro/LICENSE"
 "integrations" = "lemoncrow/integrations"
 
 [tool.hatch.build.targets.wheel.hooks.custom]

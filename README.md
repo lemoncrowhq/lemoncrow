@@ -14,7 +14,7 @@ LemonCrow runs underneath Claude Code, Codex, and other supported hosts with a l
 
 **State-of-the-art context engineering.** Read less, Output less, without compromising correctness. LemonCrow is tuned end to end across input context and output — ranked retrieval, exact-range reads, and bounded, compacted output — and out-measures grep-class code-index and output-compression tooling on the [numbers below](#results) (~1.9x retrieval MRR vs ripgrep, 27.9% fewer output tokens on SWE-bench Verified).
 
-[![License](https://img.shields.io/badge/License-Apache--2.0-blue?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache--2.0%20%2B%20PolyForm--NC-blue?style=flat-square)](LICENSE)
 [![Latest release](https://img.shields.io/github/v/release/lemoncrow-lab/lemoncrow?style=flat-square)](https://github.com/lemoncrow-lab/lemoncrow/releases)
 [![Stars](https://img.shields.io/github/stars/lemoncrow-lab/lemoncrow?style=flat-square)](https://github.com/lemoncrow-lab/lemoncrow)
 
@@ -409,6 +409,15 @@ bash scripts/local.sh
 
 ## License
 
-LemonCrow is free and open-source software under the
-[Apache License, Version 2.0](LICENSE)
-`lemoncrow.pro` engine is planned to be released soon. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+LemonCrow is licensed by directory:
+
+- **[Apache-2.0](LICENSE)** — the runtime, CLI, MCP server, SDK, and host
+  integrations (everything outside `src/lemoncrow/pro/`).
+- **[PolyForm Noncommercial 1.0.0](src/lemoncrow/pro/LICENSE)** — the engine
+  (`src/lemoncrow/pro/`). Free for personal, hobby, study, research,
+  educational, charitable, public-research and government use. **Commercial use
+  requires a separate license** — contact legal@lemoncrow.com.
+
+Every line is published and the whole repository builds from source; the engine
+directory is source-available rather than open source. See [LICENSE](LICENSE)
+and [NOTICE](NOTICE).

@@ -288,7 +288,8 @@ Execution order (each step verified before the next):
 **Step B — Remove account/cap/entitlement system (Phases 3, 4, 10 core).**
 **Step C — Remove device minting + hardware readers (Phase 4).**
 **Step D — Neutralize remaining hosted network calls (Phase 5 tail).**
-**Step E — Open the `pro` engine in the mirror/build (Phase 6).**
+**Step E — Open the `pro` engine in the mirror/build (Phase 6).** DONE, under a
+split license — see §5.2.
 **Step F — Install/uninstall hygiene (Phases 7, 8).**
 **Step G — Docs rewrite + community-health files (Phases 9, 10, 11).**
 **Step H — Offline/no-network test + full suite (acceptance).**
@@ -471,3 +472,19 @@ hygiene, docs) proceeds regardless of these answers.
 3. **Relicense to Apache-2.0: YES.** Rewrite `LICENSE` to pure Apache-2.0, add
    `NOTICE`, update the `pyproject.toml` license string, and produce
    `docs/licensing-report.md` for the record.
+
+### 5.2 Amendment (2026-09-07) — Step E executed, with a split license
+
+Decision 1 stands (the `pro` source is published; the mirror deny and the
+`hatch_build` IP-leak guard are gone), but decision 3 is **amended**: `pro/` is
+not Apache-2.0. The repository is now licensed by directory —
+
+- everything except `src/lemoncrow/pro/`: **Apache-2.0** (`LICENSE-APACHE`);
+- `src/lemoncrow/pro/`: **PolyForm Noncommercial 1.0.0**
+  (`src/lemoncrow/pro/LICENSE`) — noncommercial use free, commercial use
+  requires a separate license from the maintainer.
+
+SPDX for the distribution: `Apache-2.0 AND PolyForm-Noncommercial-1.0.0`. The
+project as a whole is therefore source-available, not OSI open source; say so
+plainly in any public description. See `docs/legal/licensing.md` and
+`docs/legal/licensing-report.md`.

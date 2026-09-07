@@ -46,12 +46,13 @@ DEV_REMOTE = "origin"  # lemoncrow-dev -- where the watermark refs live
 # standard workflow path in the public repo.
 PUBLIC_PATH_REWRITES = ((".github/public-workflows", ".github/workflows"),)
 
-# The release wheel is built from this private repo (.github/workflows/release.yml)
-# with the full source, including the compiled-only `pro` engine (shipped as `.so`;
-# see hatch_build.py). The prebuilt wheel is cross-published to the public repo's
-# Releases, so IP source never lands on public and the public repo never runs a
-# source build. No shims are injected: the whole `pro` package is simply excluded
-# from the mirror (see the PRIVATE section of release/public-paths.txt).
+# The whole source tree is mirrored, `pro` engine included -- the public repo
+# builds from source with no proprietary component. `src/lemoncrow/pro` is
+# published under the PolyForm Noncommercial License 1.0.0 rather than
+# Apache-2.0 (see src/lemoncrow/pro/LICENSE); the rest stays Apache-2.0.
+# Release wheels are still built from this repo (.github/workflows/release.yml)
+# and cross-published to the public repo's Releases, optionally mypyc-compiled
+# for performance (see hatch_build.py).
 
 
 # ---------------------------------------------------------------------------

@@ -1,18 +1,27 @@
 # LemonCrow License
 
-LemonCrow is free and open-source software, licensed in its entirety under the
-Apache License, Version 2.0.
+LemonCrow is licensed by directory:
+
+| Path                                    | License                             |
+| --------------------------------------- | ----------------------------------- |
+| everything except `src/lemoncrow/pro/`  | Apache License, Version 2.0         |
+| `src/lemoncrow/pro/` (the engine)       | PolyForm Noncommercial License 1.0.0|
+
+SPDX: `Apache-2.0 AND PolyForm-Noncommercial-1.0.0`
 
 Copyright 2026 Pankaj Kumar (d/b/a LemonCrow)
 
-The full license text is in `LICENSE-APACHE`. A short `NOTICE` file accompanies
-this grant (section 4(d) of the License).
+All source in this repository is published and readable, and LemonCrow builds
+and runs from source with no proprietary component. The engine may optionally
+be compiled with `mypyc` for performance; the source is always present.
+`src/lemoncrow/pro/` is **source-available, not open source** — the license
+below restricts commercial use of that directory.
 
-All source in this repository — including the `lemoncrow.pro` engine (code
-intelligence, retrieval, prompt compilation, memory, and the rest of the
-runtime) — is Apache-2.0. There is no separate proprietary component required to
-build or run LemonCrow. The engine may optionally be compiled with `mypyc` for
-performance, but the source is always present and always open.
+## Apache-2.0 — runtime, CLI, MCP server, SDK, host integrations
+
+Everything outside `src/lemoncrow/pro/` is Apache-2.0. The full license text is
+in `LICENSE-APACHE`. A short `NOTICE` file accompanies this grant (section 4(d)
+of the License).
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -26,4 +35,18 @@ performance, but the source is always present and always open.
     See the License for the specific language governing permissions and
     limitations under the License.
 
-Questions: legal@lemoncrow.com
+## PolyForm Noncommercial 1.0.0 — the engine (`src/lemoncrow/pro/`)
+
+The engine (code intelligence, retrieval, prompt compilation, memory, routing,
+verification, and the rest of the savings-producing capabilities) is licensed
+under the PolyForm Noncommercial License 1.0.0. The full text is in
+`src/lemoncrow/pro/LICENSE`.
+
+Free for any noncommercial purpose — personal use, study, research, experiment,
+hobby projects, education, charitable organizations, public research, and
+government. **Commercial use requires a separate commercial license.**
+
+Required Notice: Copyright 2026 Pankaj Kumar (d/b/a LemonCrow)
+(https://github.com/lemoncrow-lab/lemoncrow)
+
+Questions / commercial licensing: legal@lemoncrow.com

@@ -64,7 +64,7 @@ cleanup_build_stage() {
 }
 trap cleanup_build_stage EXIT INT TERM
 
-cp -a pyproject.toml hatch_build.py README.md LICENSE "$BUILD_STAGE/"
+cp -a pyproject.toml hatch_build.py README.md LICENSE LICENSE-APACHE NOTICE "$BUILD_STAGE/"
 [[ -f uv.lock ]] && cp -a uv.lock "$BUILD_STAGE/"
 cp -a src integrations "$BUILD_STAGE/"
 [[ -d vendor ]] && cp -a vendor "$BUILD_STAGE/"

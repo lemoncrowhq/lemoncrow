@@ -160,18 +160,16 @@ def store(tmp_path: Path) -> StoreBundle:
     return store
 
 
-# --- Open-core boundary -----------------------------------------------------
-# The closed engine is the entire ``src/lemoncrow/pro/`` package. It ships as
-# compiled ``.so`` in the wheel and is excluded from the public source mirror
-# (release/public-paths.txt). There are no degraded shims.
+# --- Engine availability ----------------------------------------------------
+# The engine is the entire ``src/lemoncrow/pro/`` package. Its source is
+# published (Apache-2.0 everywhere else; ``pro`` itself is PolyForm
+# Noncommercial — see src/lemoncrow/pro/LICENSE) and present in every checkout,
+# so every test runs against the real modules and nothing below fires.
 #
-# In this (private) repo the ``pro`` source is always present, so every test
-# runs against the real modules and nothing below fires. The public repo is a
-# source-readable mirror with no ``pro`` source; it depends on the compiled
-# engine wheel, and its CI installs that wheel so ``lemoncrow.pro`` imports and
-# the full suite runs. The guard below is a defensive net for a *source-only*
-# checkout (public source, no wheel): pro-importing test modules are deselected
-# at collection time so pytest reports skips instead of erroring on import.
+# The guard below is a defensive net for an install that lacks the engine
+# entirely (e.g. a wheel built with ``pro`` stripped): pro-importing test
+# modules are deselected at collection time so pytest reports skips instead of
+# erroring on import.
 
 
 def _pro_importable() -> bool:

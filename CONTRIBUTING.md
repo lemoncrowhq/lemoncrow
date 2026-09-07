@@ -16,7 +16,11 @@ Start with the setup and architecture docs linked from [README.md](README.md). G
 
 ## License and contribution terms
 
-LemonCrow is open source under the [Apache License, Version 2.0](LICENSE).
+LemonCrow is licensed by directory: [Apache-2.0](LICENSE) for the runtime, CLI,
+MCP server, SDK, and integrations, and the [PolyForm Noncommercial License
+1.0.0](src/lemoncrow/pro/LICENSE) for the engine (`src/lemoncrow/pro/`).
+Contributions are accepted under the license that already covers the files you
+touch.
 
 Every contributor must agree to our [Contributor License Agreement (CLA)](CLA.md)
 before a pull request can be merged. The CLA lets the Maintainer relicense and
