@@ -29,7 +29,11 @@ from lemoncrow.gateway.adapters.mcp.deferral import (
 from lemoncrow.gateway.adapters.mcp.framework import TOOLS, mcp_tool
 from lemoncrow.gateway.adapters.mcp.fs_access import _claude_additional_dirs
 from lemoncrow.gateway.adapters.mcp.ledger import _check_redundant_file_dump, _request_bridge_id
-from lemoncrow.gateway.adapters.mcp.session_state import _forget_mcp_managed_bash, _record_mcp_managed_bash
+from lemoncrow.gateway.adapters.mcp.session_state import (
+    _forget_mcp_managed_bash,
+    _record_mcp_managed_bash,
+    live_managed_bash_ids,
+)
 from lemoncrow.gateway.adapters.mcp.smart_state import (
     _STATE_LOCK,
     _acquire_smart_state_flock,
@@ -159,6 +163,26 @@ def _record_bash_command_stats(command: str, *, shipped_chars: int, omitted_char
             _write_smart_state(state)
         finally:
             _release_smart_state_flock(_flock)
+
+
+# A host that caps MCP tool calls backgrounds the call when it runs long and
+# hands back a *task* id of its own -- Claude Code says "moved to the background
+# as task k31b54d8q ... use TaskStop with task_id". That id addresses the host's
+# task, never a managed shell, so feeding it back as bash(id=...) can only fail;
+# the shell handle is the shorter id inside the eventual completion payload.
+# Host task ids seen so far are 9 lowercase alphanumerics, managed shell ids 6,
+# so the shape is worth calling out -- as a hint only, never as a rejection.
+_HOST_TASK_ID_RE = re.compile(r"^[0-9a-z]{9}$")
+
+
+def _unknown_session_hint(session_id: str) -> str:
+    """Trailing clause naming what the caller could have polled instead."""
+    parts: list[str] = []
+    if _HOST_TASK_ID_RE.match(session_id):
+        parts.append("looks like a host background-task id (TaskStop/task output take it), not a shell id")
+    live = [sid for sid in live_managed_bash_ids() if sid != session_id]
+    parts.append("live sessions: " + ", ".join(live[:5]) if live else "no live sessions in this MCP process")
+    return " -- " + "; ".join(parts)
 
 
 def _default_bash_soft_timeout() -> int:
@@ -436,7 +460,7 @@ def _run_bash_tool(
             return {
                 "status": "error",
                 "session_id": session_id,
-                "stderr": f"unknown shell session: {session_id}",
+                "stderr": f"unknown shell session: {session_id}{_unknown_session_hint(session_id or '')}",
                 "exit_code": -1,
             }
 

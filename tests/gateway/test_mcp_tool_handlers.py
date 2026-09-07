@@ -2757,6 +2757,31 @@ def test_render_bash_text_includes_spill_hint_in_truncation_notice() -> None:
     assert "[output truncated: 50 lines omitted]" not in text
 
 
+def test_unknown_session_error_names_the_live_handles(monkeypatch: pytest.MonkeyPatch) -> None:
+    from lemoncrow.gateway.adapters.mcp import bash as bash_mod
+
+    monkeypatch.setattr(bash_mod, "live_managed_bash_ids", lambda: ["v334oo", "8muo9e"])
+
+    text = bash_mod.tool_bash({"id": "zzzzzz", "action": "status"})
+
+    assert "unknown shell session: zzzzzz" in text
+    assert "live sessions: v334oo, 8muo9e" in text
+
+
+def test_unknown_session_error_flags_a_host_task_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A host that caps MCP calls hands back its own task id; feeding that back
+    # as a shell handle can only fail, so the error has to say which id-space
+    # it landed in rather than repeating "unknown".
+    from lemoncrow.gateway.adapters.mcp import bash as bash_mod
+
+    monkeypatch.setattr(bash_mod, "live_managed_bash_ids", lambda: [])
+
+    text = bash_mod.tool_bash({"id": "k31b54d8q", "action": "status"})
+
+    assert "host background-task id" in text
+    assert "no live sessions in this MCP process" in text
+
+
 def test_render_bash_text_omits_spill_hint_when_absent() -> None:
     from lemoncrow.gateway.adapters.mcp_server import _render_bash_text
 

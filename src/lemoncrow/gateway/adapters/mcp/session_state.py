@@ -163,3 +163,26 @@ def _record_mcp_managed_bash(started: dict[str, Any]) -> None:
 def _forget_mcp_managed_bash(session_id: str) -> None:
     if session_id:
         _mutate_mcp_managed_bash(remove_id=session_id)
+
+
+def live_managed_bash_ids() -> list[str]:
+    """Session ids this MCP process currently owns, most recently started first.
+
+    Reads the same registration file ``_record_mcp_managed_bash`` writes, so a
+    poll against an id that does not exist can name the handles that would have
+    worked instead of dead-ending on "unknown shell session".
+    """
+    try:
+        data = json.loads(_mcp_session_file().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    rows = [row for row in data.get("managed_bash", []) if isinstance(row, dict)]
+    rows.sort(key=lambda row: float(row.get("started_at") or 0.0), reverse=True)
+    seen: list[str] = []
+    for row in rows:
+        session_id = str(row.get("session_id") or "")
+        if session_id and session_id not in seen:
+            seen.append(session_id)
+    return seen
