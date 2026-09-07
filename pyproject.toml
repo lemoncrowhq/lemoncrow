@@ -16,7 +16,7 @@ babel = { path = "vendor/babel-99.0.0-py3-none-any.whl" }
 
 [project]
 name = "lemoncrow"
-version = "0.7.1"
+version = "0.7.2"
 description = "Context and execution runtime for coding agents — code intelligence, bounded tools, durable memory, and verification."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
