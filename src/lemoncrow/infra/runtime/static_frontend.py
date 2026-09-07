@@ -24,6 +24,7 @@ import argparse
 import sys
 import urllib.error
 import urllib.request
+from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -47,88 +48,109 @@ _HOP_BY_HOP = frozenset(
 )
 
 
-def _make_handler(directory: Path, api_url: str) -> type[SimpleHTTPRequestHandler]:
-    target_base = api_url.rstrip("/")
+class _BundleHandler(SimpleHTTPRequestHandler):
+    """Static bundle + ``/api`` proxy.
 
-    class _BundleHandler(SimpleHTTPRequestHandler):
-        protocol_version = "HTTP/1.1"
+    Module level, and configured through ``__init__`` keywords bound by
+    :func:`_make_handler`, because mypyc rejects nested class definitions --
+    the closure-based factory this replaced failed the release wheel build
+    with "Nested class definitions not supported".
+    """
 
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            super().__init__(*args, directory=str(directory), **kwargs)
+    protocol_version = "HTTP/1.1"
 
-        # ---- routing ---------------------------------------------------- #
+    def __init__(self, *args: Any, directory: str = "", api_url: str = DEFAULT_API_URL, **kwargs: Any) -> None:
+        # Set before super().__init__: BaseHTTPRequestHandler serves the whole
+        # request inside its constructor, so the verb handlers run before it
+        # returns and must already see the proxy target.
+        self._api_base = api_url.rstrip("/")
+        super().__init__(*args, directory=directory, **kwargs)
 
-        def _is_api(self) -> bool:
-            return self.path == API_PREFIX or self.path.startswith(API_PREFIX + "/")
+    # ---- routing -------------------------------------------------------- #
 
-        def _bundle_has_target(self) -> bool:
-            # translate_path() already drops the query string and fragment.
-            candidate = Path(self.translate_path(self.path))
-            if candidate.is_dir():
-                return (candidate / "index.html").exists()
-            return candidate.exists()
+    def _is_api(self) -> bool:
+        return self.path == API_PREFIX or self.path.startswith(API_PREFIX + "/")
 
-        def _serve_static(self, *, head: bool) -> None:
-            if not self._bundle_has_target():
-                self.path = "/index.html"  # SPA history fallback
-            if head:
-                super().do_HEAD()
-            else:
-                super().do_GET()
+    def _bundle_has_target(self) -> bool:
+        # translate_path() already drops the query string and fragment.
+        candidate = Path(self.translate_path(self.path))
+        if candidate.is_dir():
+            return (candidate / "index.html").exists()
+        return candidate.exists()
 
-        # ---- proxy ------------------------------------------------------ #
+    def _serve_static(self, *, head: bool) -> None:
+        if not self._bundle_has_target():
+            self.path = "/index.html"  # SPA history fallback
+        if head:
+            super().do_HEAD()
+        else:
+            super().do_GET()
 
-        def _proxy(self) -> None:
-            length = int(self.headers.get("Content-Length") or 0)
-            body = self.rfile.read(length) if length > 0 else None
-            request = urllib.request.Request(
-                target_base + self.path[len(API_PREFIX) :],
-                data=body,
-                method=self.command,
-            )
-            for key, value in self.headers.items():
-                if key.lower() in _HOP_BY_HOP or key.lower() in {"host", "content-length"}:
-                    continue
-                request.add_header(key, value)
-            try:
-                with urllib.request.urlopen(request, timeout=_PROXY_TIMEOUT_SECONDS) as response:
-                    status, headers, payload = response.status, response.headers, response.read()
-            except urllib.error.HTTPError as exc:
-                status, headers, payload = exc.code, exc.headers, exc.read()
-            except (urllib.error.URLError, OSError) as exc:
-                self.send_error(502, f"LemonCrow service unreachable at {target_base}: {exc}")
-                return
-            self.send_response(status)
-            for key, value in headers.items():
-                if key.lower() in _HOP_BY_HOP or key.lower() == "content-length":
-                    continue
-                self.send_header(key, value)
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            if self.command != "HEAD":
-                self.wfile.write(payload)
+    # ---- proxy ---------------------------------------------------------- #
 
-        # ---- verbs ------------------------------------------------------ #
+    def _proxy(self) -> None:
+        length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length) if length > 0 else None
+        request = urllib.request.Request(
+            self._api_base + self.path[len(API_PREFIX) :],
+            data=body,
+            method=self.command,
+        )
+        for key, value in self.headers.items():
+            if key.lower() in _HOP_BY_HOP or key.lower() in {"host", "content-length"}:
+                continue
+            request.add_header(key, value)
+        try:
+            with urllib.request.urlopen(request, timeout=_PROXY_TIMEOUT_SECONDS) as response:
+                status, headers, payload = response.status, response.headers, response.read()
+        except urllib.error.HTTPError as exc:
+            status, headers, payload = exc.code, exc.headers, exc.read()
+        except (urllib.error.URLError, OSError) as exc:
+            self.send_error(502, f"LemonCrow service unreachable at {self._api_base}: {exc}")
+            return
+        self.send_response(status)
+        for key, value in headers.items():
+            if key.lower() in _HOP_BY_HOP or key.lower() == "content-length":
+                continue
+            self.send_header(key, value)
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(payload)
 
-        def do_GET(self) -> None:
-            self._proxy() if self._is_api() else self._serve_static(head=False)
+    # ---- verbs ---------------------------------------------------------- #
 
-        def do_HEAD(self) -> None:
-            self._proxy() if self._is_api() else self._serve_static(head=True)
+    def _api_only(self) -> None:
+        if self._is_api():
+            self._proxy()
+        else:
+            self.send_error(405, "only /api accepts this method")
 
-        def _api_only(self) -> None:
-            if self._is_api():
-                self._proxy()
-            else:
-                self.send_error(405, "only /api accepts this method")
+    def do_GET(self) -> None:
+        self._proxy() if self._is_api() else self._serve_static(head=False)
 
-        do_POST = _api_only
-        do_PUT = _api_only
-        do_PATCH = _api_only
-        do_DELETE = _api_only
-        do_OPTIONS = _api_only
+    def do_HEAD(self) -> None:
+        self._proxy() if self._is_api() else self._serve_static(head=True)
 
-    return _BundleHandler
+    def do_POST(self) -> None:
+        self._api_only()
+
+    def do_PUT(self) -> None:
+        self._api_only()
+
+    def do_PATCH(self) -> None:
+        self._api_only()
+
+    def do_DELETE(self) -> None:
+        self._api_only()
+
+    def do_OPTIONS(self) -> None:
+        self._api_only()
+
+
+def _make_handler(directory: Path, api_url: str) -> Any:
+    """Bind bundle directory + proxy target to the handler class."""
+    return partial(_BundleHandler, directory=str(directory), api_url=api_url)
 
 
 class _Server(ThreadingHTTPServer):
