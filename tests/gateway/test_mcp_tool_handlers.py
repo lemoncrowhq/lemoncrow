@@ -2782,6 +2782,50 @@ def test_unknown_session_error_flags_a_host_task_id(monkeypatch: pytest.MonkeyPa
     assert "no live sessions in this MCP process" in text
 
 
+def test_smart_state_flock_gives_up_instead_of_waiting_forever(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A busy machine-global lock must not park the caller indefinitely.
+
+    The lock file is shared by every MCP process on the machine, so a blocking
+    acquisition lets one stalled holder park every tool call everywhere -- after
+    the call has already done its real work and is queued only to record a
+    counter.
+    """
+    import fcntl
+    import time as _time
+
+    from lemoncrow.gateway.adapters.mcp import smart_state
+
+    monkeypatch.setenv("LEMONCROW_SMART_STATE_LOCK_TIMEOUT", "0.2")
+
+    seen_flags: list[int] = []
+
+    def _always_busy(_fd: object, flags: int, *_args: object, **_kwargs: object) -> None:
+        seen_flags.append(flags)
+        raise BlockingIOError("locked")
+
+    monkeypatch.setattr(fcntl, "flock", _always_busy)
+
+    started = _time.monotonic()
+    handle = smart_state._acquire_smart_state_flock()
+    elapsed = _time.monotonic() - started
+
+    assert handle is None
+    assert elapsed < 3.0, f"acquisition should give up near the 0.2s timeout, took {elapsed:.1f}s"
+
+    # The load-bearing assertion. Elapsed time alone cannot tell a bounded
+    # acquisition from a blocking one here: BlockingIOError is an OSError, so a
+    # blocking `flock(LOCK_EX)` under this mock also returns None immediately
+    # via the broad handler, and a timing-only test passes either way. What
+    # actually distinguishes them is the flag: every attempt must be LOCK_NB.
+    assert seen_flags, "flock was never attempted"
+    assert all(
+        f & fcntl.LOCK_NB for f in seen_flags
+    ), f"every acquisition attempt must be non-blocking, got flags {seen_flags}"
+    # ...and it must actually retry to the deadline rather than degrade into a
+    # single try, which would drop the cross-process synchronisation entirely.
+    assert len(seen_flags) > 1, f"expected polling until the deadline, saw {len(seen_flags)} attempt(s)"
+
+
 def test_render_bash_text_omits_spill_hint_when_absent() -> None:
     from lemoncrow.gateway.adapters.mcp_server import _render_bash_text
 
