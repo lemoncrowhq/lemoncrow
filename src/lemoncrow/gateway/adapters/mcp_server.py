@@ -3513,6 +3513,75 @@ def _workspace_root() -> Path:
     return Path(workspace)
 
 
+_last_session_cwd: str | None = None
+"""Most recent explicit ``cwd`` seen on a ``bash`` call, or None.
+
+This server is a long-lived process whose own ``os.getcwd()`` is fixed at
+launch, and MCP carries no per-call session cwd (we implement no ``roots``
+capability). So when a session enters a git worktree, :func:`_workspace_root`
+keeps naming the *main checkout*. A bash call's explicit ``cwd`` is the only
+place the session's real working directory reaches this process, which is why
+bash honored the worktree and edit did not. Recorded here and used to resolve
+relative edit paths -- see :func:`_session_worktree_root`.
+
+lc-debt: process-global, so a shared HTTP-mode server hosting two sessions on
+the SAME repo could let one session's worktree cwd redirect the other's
+relative edits (a foreign repo is already rejected by the
+``<root>/.git/worktrees`` check, and the redirect is always disclosed).
+Upgrade path: key this by MCP session id once the dispatcher threads one
+through, or drop it entirely if the protocol ever carries a per-call cwd.
+"""
+
+
+def _record_session_cwd(name: str, args: Any) -> None:
+    """Remember a bash call's cwd, the only session-cwd signal this server gets."""
+    global _last_session_cwd
+    if name != "bash" or not isinstance(args, dict):
+        return
+    cwd = args.get("cwd")
+    if isinstance(cwd, str) and cwd.strip():
+        _last_session_cwd = cwd.strip()
+
+
+def _session_worktree_root(workspace_root: Path) -> Path | None:
+    """The linked git worktree the session is working in, else None.
+
+    Detected without spawning git: a linked worktree's ``.git`` is a *file*
+    holding ``gitdir: <path>``, and for a worktree of THIS repo that path lives
+    under ``<workspace_root>/.git/worktrees/``. A normal checkout has ``.git``
+    as a directory, which ends the walk immediately.
+
+    Returns None for every uncertain case -- no recorded cwd, a plain
+    directory, a worktree belonging to a different repo -- so resolution falls
+    back to the workspace root exactly as before.
+    """
+    recorded = _last_session_cwd
+    if not recorded:
+        return None
+    try:
+        candidate = Path(recorded).expanduser().resolve()
+        if not candidate.is_dir():
+            return None
+        root = workspace_root.resolve()
+        worktrees_dir = (root / ".git" / "worktrees").resolve()
+        for directory in (candidate, *candidate.parents):
+            marker = directory / ".git"
+            if marker.is_dir():
+                return None  # a normal checkout, not a linked worktree
+            if not marker.is_file():
+                continue
+            gitdir = marker.read_text(encoding="utf-8").strip()
+            if not gitdir.startswith("gitdir:"):
+                return None
+            target = Path(gitdir.split(":", 1)[1].strip()).resolve()
+            if not target.is_relative_to(worktrees_dir):
+                return None  # a worktree, but of some other repo
+            return None if directory == root else directory
+    except OSError:
+        return None
+    return None
+
+
 # Thread-local slot for passing real tokens_saved from tool handlers to the
 # budget recorder without polluting the LLM-facing response dict.
 # _tool_call_tokens_saved moved to mcp.smart_state (imported/re-exported).
@@ -5229,7 +5298,10 @@ def render_tool_result_text(name: str, result: Any) -> str | None:
         # (the just-edited file always shows), so treating it like an
         # actionable key would blow the minimal render up on every call.
         keys = set(payload)
-        base_keys = keys - {"vcs_status"}
+        # `resolved_against` rides as a one-liner suffix like vcs_status rather
+        # than tripping the JSON fallback -- a redirected edit is still a clean
+        # success and should not render as a structured dump.
+        base_keys = keys - {"vcs_status", "resolved_against"}
         if base_keys <= {"calls_saved"}:
             text = "ok"
         elif base_keys <= {"applied", "calls_saved"}:
@@ -5239,6 +5311,9 @@ def render_tool_result_text(name: str, result: Any) -> str | None:
             elif not applied:
                 text = "ok"
         if text:
+            resolved_against = payload.get("resolved_against")
+            if isinstance(resolved_against, str) and resolved_against:
+                text = f"{text} | resolved against worktree {resolved_against} (from last bash cwd)"
             vcs_raw = payload.get("vcs_status")
             vcs = vcs_raw if isinstance(vcs_raw, dict) else {}
             vcs_lines = vcs.get("lines")
@@ -7288,6 +7363,11 @@ def _silence_clean_edit_result(result: dict[str, Any]) -> dict[str, Any]:
             silent["applied"] = applied
         if "calls_saved" in result:
             silent["calls_saved"] = result["calls_saved"]
+        # A redirected edit is never silent about being redirected: the whole
+        # point of the disclosure is that it survives the clean-success path,
+        # which is exactly where a wrong worktree inference would hide.
+        if "resolved_against" in result:
+            silent["resolved_against"] = result["resolved_against"]
         return silent
     for key in _EDIT_NOISE_KEYS:
         result.pop(key, None)
@@ -7420,15 +7500,33 @@ def tool_smart_edit(
     # workspace env + per-request project override) so write-confinement below
     # matches the active workspace.
     repo_root = _workspace_root()
+    # A session that entered a git worktree keeps calling this same long-lived
+    # server, whose _workspace_root() still names the MAIN CHECKOUT. A relative
+    # edit path therefore resolved to the wrong copy of the file -- and passed
+    # write-confinement unnoticed, because in-repo worktrees
+    # (<repo>/.claude/worktrees/...) sit *under* that root. Resolve relative
+    # paths against the worktree the session is demonstrably working in.
+    #
+    # This is an INFERENCE (from the last bash cwd), so it is never silent:
+    # `resolved_against` rides on the result, survives the clean-success
+    # squelch, and renders as a suffix on the one-liner. Absolute paths are
+    # unaffected -- _resolve_snapshot_path only applies a root to relative ones.
+    _session_worktree = _session_worktree_root(repo_root)
+    _edit_root = _session_worktree or repo_root
     edits = [_normalize_edit_aliases(e) for e in edits]
     _require_edits(edits)
 
-    paths = _collect_touched_paths(edits, repo_root=repo_root)
+    paths = _collect_touched_paths(edits, repo_root=_edit_root)
     # Confine writes to the workspace root plus any additional directories from
     # Claude Code's additionalDirectories setting or LEMONCROW_ADDITIONAL_DIRS env.
     # Read tools accept any absolute path; writes need explicit opt-in.
-    _extra_roots = [*_claude_additional_dirs(repo_root), Path("/tmp")]
-    _allowed_edit_roots = [repo_root, *_extra_roots]
+    # Path("/tmp").resolve() as well as "/tmp": on macOS /tmp is a symlink to
+    # /private/tmp, and the candidates below are resolved, so the bare literal
+    # never matched and the /tmp allowance was dead on that platform.
+    _extra_roots = [*_claude_additional_dirs(repo_root), Path("/tmp"), Path("/tmp").resolve()]
+    if _session_worktree is not None:
+        _extra_roots.append(_session_worktree)
+    _allowed_edit_roots = [repo_root, _edit_root, *_extra_roots]
 
     _escaped_edit_paths = [
         str(_p) for _p in paths.values() if not any(_p == _r or _p.is_relative_to(_r) for _r in _allowed_edit_roots)
@@ -7644,7 +7742,7 @@ def tool_smart_edit(
 
         from lemoncrow.pro.capabilities.tool_supervision.rich_edit import apply_rich_edits
 
-        result = apply_rich_edits(edits, atomic=atomic, repo_root=repo_root, allowed_roots=_extra_roots)
+        result = apply_rich_edits(edits, atomic=atomic, repo_root=_edit_root, allowed_roots=_extra_roots)
 
         # Sync the long-lived engine's index-version cache so the next explore
         # call gets a cache miss and re-queries the FTS5 index (which the
@@ -7849,6 +7947,10 @@ def tool_smart_edit(
         # Incremental: refresh the shared index for the touched files now, so a
         # follow-up search/explore reflects this edit without the autosync lag.
         _reindex_edited_files(repo_root, [str(p) for p in paths.values()])
+    # Disclose the worktree redirect. It is an inference, so a wrong one has to
+    # be visible in the same breath as the write it misdirected.
+    if _session_worktree is not None:
+        result["resolved_against"] = str(_session_worktree)
     return _silence_clean_edit_result(result)
 
 
@@ -11733,6 +11835,10 @@ def _handle(request: dict[str, Any]) -> dict[str, Any] | _Deferred | None:
         # N10 — request-scoped project isolation. Honor an Mcp-Project-Path-style
         # override for the lifetime of this request only; absent -> unchanged.
         _prior_project = _set_request_project(_extract_request_project(params, args if isinstance(args, dict) else {}))
+        # A bash cwd is the only place the session's real working directory
+        # reaches this long-lived process; record it so edit can resolve
+        # relative paths against a worktree the session has entered.
+        _record_session_cwd(name, args)
         _call_duration_ms: int = 0
         _call_started = time.perf_counter()
 

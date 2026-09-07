@@ -1291,3 +1291,120 @@ def test_tiny_fragment_without_old_still_rejected(workspace: Path) -> None:
     payload = _edit({"path": "frag.py", "new": "Y = 2\n", "hooks": False})
     assert "failed" in payload, payload
     assert f.read_text(encoding="utf-8") == original
+
+
+# ---------------------------------------------------------------------------
+# Worktree-aware relative path resolution
+#
+# The MCP server is long-lived and its own cwd is fixed at launch, so a session
+# that enters a git worktree used to have its RELATIVE edit paths silently
+# resolved against the main checkout -- writing the right change to the wrong
+# copy of the file, and passing write-confinement because in-repo worktrees sit
+# under the workspace root.
+# ---------------------------------------------------------------------------
+
+
+def _git(*args: str, cwd: Path) -> None:
+    import subprocess
+
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+
+
+def _repo_with_worktree(root: Path) -> Path:
+    """Init a git repo at `root` and add a linked worktree; return the worktree."""
+    _git("init", "-q", cwd=root)
+    _git("config", "user.email", "t@example.com", cwd=root)
+    _git("config", "user.name", "t", cwd=root)
+    (root / "seed.txt").write_text("seed\n", encoding="utf-8")
+    _git("add", "-A", cwd=root)
+    _git("commit", "-qm", "seed", cwd=root)
+    wt = root / ".claude" / "worktrees" / "wt"
+    wt.parent.mkdir(parents=True, exist_ok=True)
+    _git("worktree", "add", "-q", str(wt), "-b", "wt-branch", cwd=root)
+    return wt
+
+
+def test_relative_edit_follows_the_session_into_a_worktree(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A relative path writes to the worktree the session is in, not the main checkout."""
+    wt = _repo_with_worktree(workspace)
+    (workspace / "target.txt").write_text("MAIN\n", encoding="utf-8")
+    (wt / "target.txt").write_text("WORKTREE\n", encoding="utf-8")
+    monkeypatch.setattr(mcp_server, "_last_session_cwd", str(wt))
+
+    payload = _edit(
+        {
+            "post_edit_hooks": False,
+            "edits": [{"file_path": "target.txt", "old_string": "WORKTREE", "new_string": "EDITED"}],
+        }
+    )
+
+    assert "failed" not in payload, payload
+    assert (wt / "target.txt").read_text(encoding="utf-8") == "EDITED\n"
+    # The whole point: the main checkout is untouched.
+    assert (workspace / "target.txt").read_text(encoding="utf-8") == "MAIN\n"
+
+
+def test_worktree_redirect_is_disclosed_to_the_model(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The redirect is inferred from the last bash cwd, so it is never silent.
+
+    A clean success is normally squelched to `applied path:line`; a wrong
+    inference would then be invisible exactly when it misdirected a write.
+    """
+    wt = _repo_with_worktree(workspace)
+    (wt / "target.txt").write_text("WORKTREE\n", encoding="utf-8")
+    monkeypatch.setattr(mcp_server, "_last_session_cwd", str(wt))
+
+    text = _edit_text(
+        {
+            "post_edit_hooks": False,
+            "edits": [{"file_path": "target.txt", "old_string": "WORKTREE", "new_string": "EDITED"}],
+        }
+    )
+
+    assert "resolved against worktree" in text, text
+    assert str(wt) in text, text
+
+
+def test_no_worktree_evidence_keeps_the_main_checkout(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without a worktree cwd, resolution is unchanged -- and says nothing."""
+    _repo_with_worktree(workspace)
+    (workspace / "target.txt").write_text("MAIN\n", encoding="utf-8")
+    monkeypatch.setattr(mcp_server, "_last_session_cwd", str(workspace))
+
+    text = _edit_text(
+        {
+            "post_edit_hooks": False,
+            "edits": [{"file_path": "target.txt", "old_string": "MAIN", "new_string": "EDITED"}],
+        }
+    )
+
+    assert (workspace / "target.txt").read_text(encoding="utf-8") == "EDITED\n"
+    assert "resolved against" not in text, text
+
+
+def test_a_worktree_of_another_repo_does_not_redirect(
+    workspace: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only a worktree of THIS repo counts; a foreign one falls back to the root."""
+    _repo_with_worktree(workspace)
+    other = tmp_path.parent / "other-repo"
+    other.mkdir(parents=True, exist_ok=True)
+    foreign_wt = _repo_with_worktree(other)
+    monkeypatch.setattr(mcp_server, "_last_session_cwd", str(foreign_wt))
+
+    assert mcp_server._session_worktree_root(workspace) is None
+
+
+def test_bash_cwd_is_what_teaches_edit_where_the_session_is(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only a bash call's cwd is recorded -- it is the sole session-cwd signal."""
+    monkeypatch.setattr(mcp_server, "_last_session_cwd", None)
+
+    mcp_server._record_session_cwd("read", {"cwd": "/not/recorded"})
+    assert mcp_server._last_session_cwd is None
+
+    mcp_server._record_session_cwd("bash", {"cwd": "/recorded"})
+    assert mcp_server._last_session_cwd == "/recorded"
+
+    # A bash call without an explicit cwd must not clear what we know.
+    mcp_server._record_session_cwd("bash", {})
+    assert mcp_server._last_session_cwd == "/recorded"
