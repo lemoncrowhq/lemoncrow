@@ -41,6 +41,7 @@ from lemoncrow.infra.runtime.stack_lifecycle import (
     _signal_process_group,
     _stack_dir,
     _stack_frontend_dir,
+    _stack_frontend_is_prebuilt,
     _stack_frontend_pid_path,
     _stack_log_path,
     _stack_pid_path,
@@ -218,15 +219,42 @@ def stack_run(
     )
     frontend_env = os.environ.copy()
     frontend_env["VITE_API_URL"] = f"http://localhost:{service_port}"
-    # npm's shebang needs `node` on PATH even when npm itself is invoked by
-    # full path (see _get_node_dir) -- matters under a minimal-PATH spawner
-    # like launchd, which the frontend can otherwise fail to start under.
-    # Resolve npm once and pass it through so node is paired with the same
-    # install rather than picked independently (avoids a node/npm mismatch).
-    _npm_path = _get_npm_path()
-    _node_dir = _get_node_dir(_npm_path)
-    if _node_dir:
-        frontend_env["PATH"] = f"{_node_dir}:{frontend_env.get('PATH', '')}"
+    if _stack_frontend_is_prebuilt(frontend_dir):
+        # Release installs ship a built bundle, not a checkout: no npm, no vite.
+        frontend_command = [
+            sys.executable,
+            "-m",
+            "lemoncrow.infra.runtime.static_frontend",
+            "--dir",
+            str(frontend_dir),
+            "--host",
+            frontend_host,
+            "--port",
+            str(frontend_port),
+            "--api-url",
+            f"http://localhost:{service_port}",
+        ]
+    else:
+        # npm's shebang needs `node` on PATH even when npm itself is invoked by
+        # full path (see _get_node_dir) -- matters under a minimal-PATH spawner
+        # like launchd, which the frontend can otherwise fail to start under.
+        # Resolve npm once and pass it through so node is paired with the same
+        # install rather than picked independently (avoids a node/npm mismatch).
+        _npm_path = _get_npm_path()
+        _node_dir = _get_node_dir(_npm_path)
+        if _node_dir:
+            frontend_env["PATH"] = f"{_node_dir}:{frontend_env.get('PATH', '')}"
+        frontend_command = [
+            _npm_path,
+            "exec",
+            "vite",
+            "--",
+            "--host",
+            frontend_host,
+            "--port",
+            str(frontend_port),
+            "--strictPort",
+        ]
 
     service_proc: subprocess.Popen[bytes] | None = None
     if adopted_service:
@@ -254,17 +282,7 @@ def stack_run(
             start_new_session=True,
         )
     frontend_proc = subprocess.Popen(
-        [
-            _npm_path,
-            "exec",
-            "vite",
-            "--",
-            "--host",
-            frontend_host,
-            "--port",
-            str(frontend_port),
-            "--strictPort",
-        ],
+        frontend_command,
         cwd=frontend_dir,
         env=frontend_env,
         start_new_session=True,

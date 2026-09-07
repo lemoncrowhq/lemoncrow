@@ -173,6 +173,9 @@ def _servicectl_status_payload(root: Path) -> dict[str, Any]:
         "log_file": str(_servicectl_log_path(root)),
         "state_file": str(_servicectl_state_path(root)),
         "last_tick_at": state.get("last_tick_at"),
+        # Surfaced so a stale lemoncrow.com/savings is diagnosable without
+        # reading state.json: no timestamp here means nothing has pushed.
+        "last_usage_report_at": state.get("last_usage_report_at"),
         "last_processed_jobs": state.get("last_processed_jobs", []),
         "last_enqueued_jobs": state.get("last_enqueued_jobs", []),
         "last_imported_sessions": state.get("last_imported_sessions", {}),
@@ -992,8 +995,31 @@ def _servicectl_tick(
             logging.exception("worker run-once subprocess error")
             break
 
+    # Push cumulative savings to the signed-in account.
+    #
+    # The only other background pusher is the savings-reconciler thread started
+    # by the API service (``core/service/api.py`` -> start_savings_reconciler),
+    # which lives inside the OPTIONAL visualization stack. An install that never
+    # runs ``lc stack start`` -- or whose stack is down -- therefore had no
+    # automated channel at all, and lemoncrow.com/savings only advanced on the
+    # forced push inside ``lc account login``. The controller is the always-on
+    # component, so it reports here too.
+    #
+    # Cheap and privacy-preserving by construction: maybe_report_usage throttles
+    # itself on its own on-disk watermark and returns immediately when no auth
+    # token is stored (login is the opt-in), so a logged-out install never
+    # phones home. Guarded -- a network failure must never abort the tick.
+    usage_reported = False
+    try:
+        from lemoncrow.core.capabilities.licensing.usage_report import maybe_report_usage
+
+        usage_reported = bool(maybe_report_usage(root))
+    except Exception:
+        logging.exception("account usage report failed")
+
     payload = {
         "last_tick_at": now.isoformat(),
+        "last_usage_report_at": (now.isoformat() if usage_reported else state.get("last_usage_report_at")),
         "last_processed_jobs": processed,
         "last_enqueued_jobs": enqueued,
         "last_imported_sessions": imported_sessions if import_due else state.get("last_imported_sessions", {}),

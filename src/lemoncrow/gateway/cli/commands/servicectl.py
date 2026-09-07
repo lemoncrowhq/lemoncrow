@@ -128,9 +128,16 @@ def worker_start(ctx: click.Context) -> None:
 
 
 @worker_group.command("run-once")
+@click.option("--json", "as_json", is_flag=True)
 @click.pass_context
-def worker_run_once(ctx: click.Context) -> None:
-    """Claim and process one pending job then exit."""
+def worker_run_once(ctx: click.Context, as_json: bool) -> None:
+    """Claim and process one pending job then exit.
+
+    ``--json`` emits ``{"processed": bool, "job_id": str | None}``. The
+    servicectl tick drains the queue by looping this subprocess and parsing
+    that payload; without the flag the option error (exit 2) aborted every
+    drain, so pending jobs never ran on a stock install.
+    """
     try:
         from lemoncrow.core.service.worker import Worker
     except ImportError as exc:
@@ -143,6 +150,9 @@ def worker_run_once(ctx: click.Context) -> None:
     store.init()
     worker = Worker(store=store)
     processed = worker.run_once()
+    if as_json:
+        _emit({"processed": processed is not None, "job_id": processed}, as_json=True)
+        return
     if processed:
         click.echo(f"processed job: {processed}")
     else:
@@ -467,6 +477,38 @@ def servicectl_run(
     jobs processed.
     """
     root = ctx.obj["root"]
+    # Self-register the pidfile. ``servicectl start`` writes it for the daemon
+    # it spawns, but launchd/systemd units invoke ``servicectl run`` directly --
+    # nothing wrote a pid then, so ``servicectl status``/``stop`` reported
+    # ``running: false, pid: None`` for a controller that was demonstrably alive.
+    _servicectl_dir(root).mkdir(parents=True, exist_ok=True)
+    _servicectl_pid_path(root).write_text(f"{os.getpid()}\n", encoding="utf-8")
+    try:
+        _run_servicectl_loop(
+            root,
+            interval_seconds=interval_seconds,
+            maintenance_interval_seconds=maintenance_interval_seconds,
+            session_import_interval_seconds=session_import_interval_seconds,
+            auto_update=auto_update,
+            auto_update_interval_seconds=auto_update_interval_seconds,
+        )
+    finally:
+        # Only reap our own entry: a controller that replaced us (auto-update
+        # restart) must keep its pid on file.
+        if _read_servicectl_pid(root) == os.getpid():
+            _clear_servicectl_pid(root)
+
+
+def _run_servicectl_loop(
+    root: Path,
+    *,
+    interval_seconds: int,
+    maintenance_interval_seconds: int,
+    session_import_interval_seconds: int,
+    auto_update: bool,
+    auto_update_interval_seconds: int,
+) -> None:
+    """Tick forever, each tick in a child subprocess (see ``servicectl_run``)."""
     try:
         while True:
             cmd = [

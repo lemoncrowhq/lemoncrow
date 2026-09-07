@@ -125,14 +125,15 @@ def _get_node_dir(npm_path: str | None = None) -> str | None:
 
 
 def _stack_frontend_dir() -> Path:
-    """Locate the Vite app directory.
+    """Locate the frontend directory -- a Vite source app or a built bundle.
 
-    The installed tree (``~/.lemoncrow/install/frontend``) ships only static
-    assets -- index.html, logos, a stub package-lock.json -- with no
-    ``package.json`` and no ``src/``. Returning it unconditionally made the
-    dependency preflight run ``npm install`` against a non-app directory (exit
-    254), killing the supervisor before vite ever bound the frontend port. Take
-    the first candidate that actually holds a ``package.json``.
+    The installed tree (``~/.lemoncrow/install/frontend``) is what the release
+    tarball ships: a PREBUILT bundle (index.html, assets/, logos, a stub
+    package-lock.json) with no ``package.json`` and no ``src/``. Returning it
+    unconditionally made the dependency preflight run ``npm install`` against a
+    non-app directory (exit 254), killing the supervisor before vite ever bound
+    the frontend port. Take the first candidate that is *either* servable form;
+    ``_stack_frontend_is_prebuilt`` then decides how to start it.
     """
     candidates: list[Path] = []
     env_dir = os.environ.get("LEMONCROW_FRONTEND_DIR")
@@ -143,9 +144,19 @@ def _stack_frontend_dir() -> Path:
         candidates.append(Path(workspace) / "frontend")
     candidates.append(_project_root() / "frontend")
     for candidate in candidates:
-        if (candidate / "package.json").exists():
+        if (candidate / "package.json").exists() or (candidate / "index.html").exists():
             return candidate
     return candidates[-1]
+
+
+def _stack_frontend_is_prebuilt(frontend_dir: Path) -> bool:
+    """True for a release-shipped static bundle: built output, no source app.
+
+    Such a directory has nothing to ``npm install`` and no vite to run, so the
+    supervisor serves it with ``lemoncrow.infra.runtime.static_frontend``
+    instead (SPA fallback + ``/api`` proxy, stdlib only).
+    """
+    return not (frontend_dir / "package.json").exists() and (frontend_dir / "index.html").exists()
 
 
 def _stack_install_command(npm_path: str, frontend_dir: Path) -> list[str]:
@@ -156,10 +167,12 @@ def _stack_install_command(npm_path: str, frontend_dir: Path) -> list[str]:
 def _ensure_stack_frontend_dependencies(frontend_dir: Path) -> None:
     if not frontend_dir.exists():
         raise click.ClickException(f"frontend directory not found: {frontend_dir}")
+    if _stack_frontend_is_prebuilt(frontend_dir):
+        return  # Built bundle: no node toolchain needed, served straight from disk.
     if not (frontend_dir / "package.json").exists():
         raise click.ClickException(
-            f"no frontend app in {frontend_dir} (package.json missing); "
-            "point LEMONCROW_FRONTEND_DIR at a checkout that has one"
+            f"no frontend in {frontend_dir} (neither package.json nor a built index.html); "
+            "point LEMONCROW_FRONTEND_DIR at a checkout or a built bundle"
         )
     npm_path = _get_npm_path()
     if npm_path == "npm" and not shutil.which("npm"):
