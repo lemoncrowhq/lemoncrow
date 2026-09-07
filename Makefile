@@ -36,8 +36,8 @@ build: ## Build and package for production distribution
 
 release/build: build ## Alias for build release jobs
 
-mirror: ## Incremental mirror bench → public repo (history-preserving): make mirror [f=1]
-	LEMONCROW_MIRROR_RUNNING=1 uv run python -m scripts.mirror $(FORCE_ARG)
+mirror: ## Incremental mirror bench → public repo (history-preserving): make mirror [f=1] [ARGS="--resync"]
+	LEMONCROW_MIRROR_RUNNING=1 uv run python -m scripts.mirror $(FORCE_ARG) $(ARGS)
 
 release: ## Bump version, commit, push, tag: make release tag=v0.4.X [f=1] [SKIP_MIRROR=1]
 	@set -e; \
