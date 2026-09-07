@@ -437,7 +437,16 @@ bash scripts/local.sh
 
 [Apache-2.0](LICENSE), all of it. The `lemoncrow.pro` engine — retrieval,
 ranking, memory, routing, verification — was the last closed piece; it has been
-open source since **7 September 2026**. Team features are included on the same
-terms — `lc team` gives you a local shared workspace with invites, roles, SSO,
-usage attribution, and an audit trail, self-hosted, no seats to buy.
+open source since **7 September 2026**.
+
+Team use is included on the same terms: `lc team` creates a workspace in your
+own store — invite codes, roles, per-user cost attribution, and an audit trail.
+It runs locally: files on your machine, no server, no seats.
+
+**Hosted LemonCrow is a separate, paid product** and is not in this repository:
+team workspaces shared across machines, shared context and memory, SSO, org-wide
+usage dashboards, retention and audit export, and support. The runtime stays
+open source — the service is what's sold. Interested, or want it run for you?
+Contact <legal@lemoncrow.com>.
+
 See [LICENSE](LICENSE) and [NOTICE](NOTICE).
