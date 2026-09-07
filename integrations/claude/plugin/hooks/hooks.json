@@ -30,6 +30,15 @@
         ]
       },
       {
+        "matcher": "mcp__(lc|lemoncrow)__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/_run_hook.sh ${CLAUDE_PLUGIN_ROOT}/hooks/mcp_read_allow.py"
+          }
+        ]
+      },
+      {
         "matcher": "Task",
         "hooks": [
           {
