@@ -435,8 +435,7 @@ bash scripts/local.sh
 
 ## License
 
-LemonCrow is free and open-source software under the
-[Apache License, Version 2.0](LICENSE) — in its entirety, engine included.
-There is no open-core split, no paid tier, and no proprietary component: the
-whole repository builds and runs from source. See [LICENSE](LICENSE) and
-[NOTICE](NOTICE).
+[Apache-2.0](LICENSE), all of it. The `lemoncrow.pro` engine — retrieval,
+ranking, memory, routing, verification — was the last closed piece; it has been
+open source since **7 September 2026**. No paid tier, no proprietary component.
+See [LICENSE](LICENSE) and [NOTICE](NOTICE).
