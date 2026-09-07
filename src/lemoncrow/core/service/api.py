@@ -41,7 +41,13 @@ from lemoncrow.core.capabilities.workflow_runtime_state import (
     workflow_runtime_detail,
 )
 from lemoncrow.core.foundation.models import Trace, coerce_trace_json, to_jsonable
-from lemoncrow.core.foundation.paths import resolve_session_state_path, resolve_workspace_root
+from lemoncrow.core.foundation.paths import (
+    confine_to_root,
+    flat_session_dir,
+    resolve_session_state_path,
+    resolve_workspace_root,
+    safe_segment,
+)
 from lemoncrow.core.service.auth import verify_api_key
 from lemoncrow.core.service.config import cfg
 from lemoncrow.core.service.schemas import (
@@ -4074,7 +4080,11 @@ def create_app(store_root: str | Path | None = None, store: StoreBundle | None =
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         since_raw = str(payload.get("since") or "").strip()
         since_dt = _req_dt(since_raw, "since").replace(tzinfo=UTC) if since_raw else None
-        result = export_audit_bundle(store_path, out_dir=Path(str(out_dir)), since=since_dt)
+        try:
+            target_dir = confine_to_root(str(out_dir), store_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"out_dir must stay under {store_path}") from exc
+        result = export_audit_bundle(store_path, out_dir=target_dir, since=since_dt)
         manager.append_audit_event(
             TeamAuditEvent(
                 action="audit.export",
@@ -4091,7 +4101,11 @@ def create_app(store_root: str | Path | None = None, store: StoreBundle | None =
         bundle_dir = payload.get("bundle_dir")
         if not bundle_dir:
             raise HTTPException(status_code=400, detail="bundle_dir is required")
-        return verify_audit_bundle(store_path, bundle_dir=Path(str(bundle_dir)))
+        try:
+            target_dir = confine_to_root(str(bundle_dir), store_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"bundle_dir must stay under {store_path}") from exc
+        return verify_audit_bundle(store_path, bundle_dir=target_dir)
 
     # ------------------------------------------------------------------ #
     # Telemetry                                                           #
@@ -5138,12 +5152,57 @@ def create_app(store_root: str | Path | None = None, store: StoreBundle | None =
 
         return PlainTextResponse(content, media_type="text/plain")
 
+    def _file_read_roots() -> list[Path]:
+        """Directories the file endpoints are allowed to serve from.
+
+        The store itself, the daemon's own workspace, every workspace LemonCrow
+        has actually recorded a session for, plus anything the operator opts in
+        through ``LEMONCROW_FILE_READ_ROOTS``. Without a list like this the
+        endpoints below served *any* path on the box -- and ``verify_api_key``
+        is a no-op unless ``LEMONCROW_REQUIRE_AUTH=true``, so "local caller"
+        means any process or any page served from any localhost port.
+        """
+        roots: list[Path] = []
+        seen: set[Path] = set()
+
+        def add(candidate: Path | str) -> None:
+            with contextlib.suppress(OSError, RuntimeError, ValueError):
+                resolved = Path(candidate).expanduser().resolve()
+                if resolved not in seen and resolved.is_dir():
+                    seen.add(resolved)
+                    roots.append(resolved)
+
+        add(store_path)
+        with contextlib.suppress(Exception):
+            add(resolve_workspace_root())
+        for raw in os.environ.get("LEMONCROW_FILE_READ_ROOTS", "").split(os.pathsep):
+            if raw.strip():
+                add(raw.strip())
+        with contextlib.suppress(Exception):
+            with sqlite3.connect(get_store().history.db_path) as conn:
+                for (workspace_path,) in conn.execute(
+                    "SELECT DISTINCT workspace_path FROM traces "
+                    "WHERE workspace_path IS NOT NULL AND workspace_path != ''"
+                ):
+                    add(workspace_path)
+        return roots
+
+    def _confined_read_path(path: str) -> Path:
+        """Resolve *path* (symlinks included) inside one of the allowed roots."""
+        for allowed in _file_read_roots():
+            with contextlib.suppress(ValueError):
+                return confine_to_root(path, allowed)
+        raise HTTPException(
+            status_code=403,
+            detail="path is outside the allowed roots (set LEMONCROW_FILE_READ_ROOTS to widen them)",
+        )
+
     @app.get("/v1/files/content", tags=["files"], dependencies=[Depends(verify_api_key)])
     def get_file_content(path: str) -> Any:
         """Return local file content with a browser-appropriate media type."""
         from fastapi.responses import FileResponse
 
-        file_path = Path(path).expanduser()
+        file_path = _confined_read_path(path)
         if not file_path.exists():
             raise HTTPException(status_code=404, detail=f"File not found: {path}")
         if not file_path.is_file():
@@ -5161,7 +5220,7 @@ def create_app(store_root: str | Path | None = None, store: StoreBundle | None =
         """Return structured projection metadata for a file read."""
         from lemoncrow.gateway.adapters.mcp_server import tool_smart_read
 
-        payload: dict[str, Any] = {"path": path, "include_meta": True}
+        payload: dict[str, Any] = {"path": str(_confined_read_path(path)), "include_meta": True}
         if view == "compact":
             pass
         elif view == "exact":
@@ -5197,9 +5256,12 @@ def create_app(store_root: str | Path | None = None, store: StoreBundle | None =
             try:
                 ledger = RunLedger.load(ledger_path)
                 snap = ledger.snapshot()
-            except Exception as e:
+            except Exception:
+                # The detail stays in the log: str(exc) on a ledger read leaks
+                # absolute store paths, and a JSONDecodeError echoes file
+                # content back to an unauthenticated local caller.
                 logging.exception("Recovered from broad exception handler")
-                return {"session_id": session_id, "error": str(e)}
+                return {"session_id": session_id, "error": "failed to load run ledger"}
 
         # Always check for a trace to fetch the full conversation history.
         # Imported sessions from Claude/Codex/OpenCode/Copilot use the Trace as source of truth.
@@ -5481,10 +5543,21 @@ def create_app(store_root: str | Path | None = None, store: StoreBundle | None =
     def get_skill(name: str) -> dict[str, Any]:
         from lemoncrow.core.environment import skill_visible
 
+        # skill_visible() is a denylist, so it is not a path guard: without
+        # safe_segment a `name` of `../../..` reads any SKILL.md on the box and
+        # doubles as a filesystem existence oracle (404 vs 200).
+        try:
+            name = safe_segment(name, field="skill name")
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail="Skill not found") from exc
         if not skill_visible(name):
             raise HTTPException(status_code=404, detail=f"Skill is hidden from the public host surface: {name}")
         root = Path(__file__).parent.parent.parent.parent.parent
-        md = root / "integrations" / "skills" / name / "SKILL.md"
+        skills_dir = (root / "integrations" / "skills").resolve()
+        try:
+            md = confine_to_root(skills_dir / name / "SKILL.md", skills_dir)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=f"Skill not found: {name}") from exc
         if not md.exists():
             raise HTTPException(status_code=404, detail=f"Skill not found: {name}")
         content = md.read_text(encoding="utf-8")
@@ -5938,13 +6011,9 @@ def create_app(store_root: str | Path | None = None, store: StoreBundle | None =
             from lemoncrow.core.foundation.paths import find_session_dir
 
             savings_fp = _stat_fp(root / "live_savings_events.jsonl")
-            existing = find_session_dir(root, session_id)
-            sidecar_path = (
-                (existing / "savings.jsonl")
-                if existing is not None
-                else (root / "sessions" / session_id / "savings.jsonl")
-            )
-            sidecar_fp = _stat_fp(sidecar_path)
+            session_root = find_session_dir(root, session_id) or flat_session_dir(root, session_id)
+            if session_root is not None:
+                sidecar_fp = _stat_fp(session_root / "savings.jsonl")
         return (trace.id, tuple(artifact_fp), savings_fp, sidecar_fp)
 
     _imported_session_payload_cache: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {}
@@ -6786,10 +6855,10 @@ def create_app(store_root: str | Path | None = None, store: StoreBundle | None =
         from lemoncrow.pro.runtime.outcome_capture import load_outcomes_from_state
 
         root = Path(cfg.lemoncrow_root)
-        _session_root = find_session_dir(root, session_id)
-        state_path = (
-            _session_root / "outcomes.json" if _session_root else root / "sessions" / session_id / "outcomes.json"
-        )
+        _session_root = find_session_dir(root, session_id) or flat_session_dir(root, session_id)
+        if _session_root is None:
+            return []
+        state_path = _session_root / "outcomes.json"
         if not state_path.exists():
             return []
         try:

@@ -85,7 +85,10 @@ def test_governance_and_audit_api_round_trip(tmp_path: Path, monkeypatch: pytest
         )
     )
     _write_done_session(root, "admin@example.com", cost=0.25)
-    bundle_dir = tmp_path / "bundle"
+    # The HTTP endpoints confine out_dir/bundle_dir to the store root -- an
+    # unauthenticated local caller must not be able to create directories and
+    # write manifests anywhere on the box. The CLI wrappers stay unconstrained.
+    bundle_dir = root / "exports" / "bundle"
 
     exported = client.post("/v1/audit/export", json={"user_id": "admin@example.com", "out_dir": str(bundle_dir)})
     verified = client.post("/v1/audit/verify", json={"bundle_dir": str(bundle_dir)})
@@ -93,3 +96,17 @@ def test_governance_and_audit_api_round_trip(tmp_path: Path, monkeypatch: pytest
     assert exported.status_code == 200
     assert verified.status_code == 200
     assert verified.json()["valid"] is True
+
+    escaped = tmp_path / "outside"
+    assert (
+        client.post("/v1/audit/export", json={"user_id": "admin@example.com", "out_dir": str(escaped)}).status_code
+        == 400
+    )
+    assert client.post("/v1/audit/verify", json={"bundle_dir": str(escaped)}).status_code == 400
+    assert not escaped.exists()
+    assert (
+        client.post(
+            "/v1/audit/export", json={"user_id": "admin@example.com", "out_dir": str(root / ".." / "outside2")}
+        ).status_code
+        == 400
+    )

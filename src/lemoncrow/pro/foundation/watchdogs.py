@@ -117,7 +117,7 @@ def error_signature(text: str) -> str:
     norm = re.sub(r"0x[0-9a-fA-F]+", "0xADDR", text)
     norm = re.sub(r"\b\d+\b", "N", norm)
     norm = re.sub(r"\s+", " ", norm).strip().lower()
-    return hashlib.sha1(norm.encode("utf-8")).hexdigest()[:12]
+    return hashlib.blake2s(norm.encode("utf-8"), digest_size=8).hexdigest()[:12]
 
 
 def args_signature(args: dict[str, Any] | str | None) -> str:
@@ -127,7 +127,7 @@ def args_signature(args: dict[str, Any] | str | None) -> str:
         return str(args)
     pairs = sorted((k, str(v)) for k, v in args.items())
     blob = "|".join(f"{k}={v}" for k, v in pairs)
-    return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:12]
+    return hashlib.blake2s(blob.encode("utf-8"), digest_size=8).hexdigest()[:12]
 
 
 # --------------------------------------------------------------------------- #

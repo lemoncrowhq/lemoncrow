@@ -18,6 +18,41 @@ class WorkspaceNotRegisteredError(RuntimeError):
     workspace. Non-git directories are never silently auto-registered."""
 
 
+_SAFE_SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+
+
+def safe_segment(value: str, *, field: str = "value") -> str:
+    """Accept only a single, traversal-free path segment.
+
+    Ids that reach the filesystem from an HTTP route (session ids, host names,
+    skill names) must never carry ``/``, ``..`` or an absolute prefix --
+    otherwise ``root / "sessions" / value`` escapes the store entirely. Raises
+    rather than sanitising: a caller that silently rewrote an id would read or
+    write the *wrong* session, which is worse than a 4xx.
+
+    Raises:
+        ValueError: if *value* is not a safe single segment.
+    """
+    text = str(value)
+    if text in {".", ".."} or not _SAFE_SEGMENT.fullmatch(text):
+        raise ValueError(f"invalid {field}: {value!r}")
+    return text
+
+
+def flat_session_dir(root: Path | str, session_id: str) -> Path | None:
+    """Legacy pre-date-partition ``sessions/<session_id>/`` directory.
+
+    Kept as a read-side fallback for stores written before the
+    ``sessions/YYYY/MM/DD/<host>/<id>/`` layout. Returns ``None`` when
+    *session_id* is not a safe segment, so a traversal id degrades to "no such
+    session" instead of escaping the store.
+    """
+    try:
+        return Path(root) / "sessions" / safe_segment(session_id, field="session_id")
+    except ValueError:
+        return None
+
+
 def workspace_key(path: Path | str) -> str:
     """Human-readable workspace directory key.
 
@@ -331,6 +366,8 @@ def session_dir(root: Path | str, host: str, session_id: str, *, search_days: in
     command given a bare session id), use :func:`find_session_dir` instead.
     """
     root = Path(root)
+    host = safe_segment(host, field="host")
+    session_id = safe_segment(session_id, field="session_id")
     today = _date.today()
     for offset in range(search_days):
         d = today - _timedelta(days=offset)
@@ -349,6 +386,10 @@ def find_session_dir(root: Path | str, session_id: str) -> Path | None:
     through :func:`session_dir` with an explicit host instead. Returns the
     first match (there should only ever be one) or ``None``.
     """
+    try:
+        session_id = safe_segment(session_id, field="session_id")
+    except ValueError:
+        return None
     root = Path(root)
     sessions_root = root / "sessions"
     if not sessions_root.is_dir():
@@ -492,12 +533,14 @@ __all__ = [
     "default_store_root",
     "detect_host",
     "find_session_dir",
+    "flat_session_dir",
     "is_recognized_workspace",
     "resolve_lessons_root",
     "resolve_session_state_path",
     "resolve_store_root_for_workspace",
     "resolve_workspace_root",
     "resolve_workspace_store_dir",
+    "safe_segment",
     "session_dir",
     "workspace_key",
 ]

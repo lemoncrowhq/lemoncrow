@@ -151,7 +151,14 @@ def write_env_files(root: Path) -> None:
         f"OPENAI_API_KEY={openai_api_key}",
         f"USER={user_id}",
     ]
-    api_env.write_text("\n".join(api_lines) + "\n", encoding="utf-8")
+    # 0600 at creation, not write_text() + chmod: this file holds an OpenAI API
+    # key, and write_text() creates it 0644 under the default umask -- a chmod
+    # afterwards still leaves a world-readable window. O_CREAT's mode only
+    # applies to a *new* file, so an existing one is re-chmod'ed explicitly.
+    fd = os.open(api_env, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(api_lines) + "\n")
+    os.chmod(api_env, 0o600)
     ui_env.parent.mkdir(parents=True, exist_ok=True)
     ui_lines = [
         f"NEXT_PUBLIC_API_URL={api_url}",

@@ -211,12 +211,12 @@ def _read_host_sidecar_savings(session_id: str, root: Path) -> tuple[int, float,
     both sources uniformly.
     """
     from lemoncrow.core.capabilities.savings_summary import _price_savings_row
-    from lemoncrow.core.foundation.paths import find_session_dir
+    from lemoncrow.core.foundation.paths import find_session_dir, flat_session_dir
 
-    existing = find_session_dir(root, session_id)
-    sidecar = (
-        (existing / "savings.jsonl") if existing is not None else (root / "sessions" / session_id / "savings.jsonl")
-    )
+    session_root = find_session_dir(root, session_id) or flat_session_dir(root, session_id)
+    if session_root is None:
+        return 0, 0.0, []
+    sidecar = session_root / "savings.jsonl"
     if not sidecar.is_file():
         return 0, 0.0, []
 
@@ -635,10 +635,12 @@ def build_report_from_ledger(ledger: RunLedger, root: Path, *, include_carry_cre
 
 def load_report(session_id: str, root: Path, *, include_carry_credit: bool = False) -> SessionReport | None:
     """Load and build a report from a persisted run file, or *None* if not found."""
-    from lemoncrow.core.foundation.paths import find_session_dir
+    from lemoncrow.core.foundation.paths import find_session_dir, flat_session_dir
 
-    existing = find_session_dir(root, session_id)
-    run_path = (existing / "run.json") if existing is not None else (root / "sessions" / session_id / "run.json")
+    session_root = find_session_dir(root, session_id) or flat_session_dir(root, session_id)
+    if session_root is None:
+        return None
+    run_path = session_root / "run.json"
     if not run_path.exists():
         return None
     try:
