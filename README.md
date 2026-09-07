@@ -53,10 +53,10 @@ a regression (SWE-bench Lite below).
 | SWE-bench Pro, 10 tasks x 5 reps                  |            88.0% |         **90.0%** |   **+2.0 pp** |   $39.01 |**$30.61** | **21.5% cheaper** |            |
 | Exploration tasks across 7 large repos x 5 reps   |                - |                 - |             - |    $19.11 |**$6.29** |   **67% cheaper** |            |
 | Telegraphic Q&A, 20 prompts x 5 reps              |                - |                 - |             - |     $8.40 |**$4.48** | **46.7% cheaper** |            |
-| Terminal-Bench 2.1, 89 tasks x 5 reps, Opus 4.8 (matched)\* |            78.9% |             78.9% |  0.0 pp (tied) |               $73.75 |          **$61.98** | **16.0% cheaper** |
-| Terminal-Bench 2.1, 89 tasks x 5 reps, Opus 5 (standalone)† |                - |             80.7% |             - |                    - |             $38.68 |                 **47% cheaper** than opus 4.8 |
+| [Terminal-Bench 2.1, 89 tasks x 5 reps, Opus 4.8 (matched)\*](https://hub.harborframework.com/jobs/47e1713b-cad9-4715-a9e7-ca71ff202ba7) |            78.9% |             78.9% |  0.0 pp (tied) |               $73.75 |          **$61.98** | **16.0% cheaper** |
+| [Terminal-Bench 2.1, 89 tasks x 5 reps, Opus 5 (standalone)†](https://hub.harborframework.com/jobs/18239ddc-556a-4631-a20d-bcf5da8d16a2) |                - |             80.7% |             - |                    - |             $38.68 |                 **47% cheaper** than opus 4.8 |
 
-<sub> Both arms 89 tasks x 5 reps = 445 trials on the same dataset — LemonCrow's Harbor run, public at [Harbor Hub job `47e1713b`](https://hub.harborframework.com/jobs/47e1713b-cad9-4715-a9e7-ca71ff202ba7), vs the Claude Code 2.1.205 leaderboard run — so correctness is directly comparable; this run ties baseline exactly (351/445 both sides). LemonCrow sends 98.6% fewer fresh input tokens (182K vs 12.87M). Cost is normalized to the 1-hour cache-write rate on both sides (LemonCrow's harness bills prompt-cache writes at that tier; baseline's real run used the cheaper 5-minute tier, so it's re-priced at 1-hour for a same-rate comparison) on the 86 of 89 tasks with a priceable trajectory both sides. † The Opus 5 row is LemonCrow-only ([Harbor Hub job `18239ddc`](https://hub.harborframework.com/jobs/18239ddc-556a-4631-a20d-bcf5da8d16a2), 359/445 resolved, `reasoning_effort=high`): no official Claude Code + Opus 5 leaderboard run exists yet, so there is nothing to compare against — the empty cells are missing baselines, not zeros. Its $38.68 is real own-tier billing (nothing to normalize) over its own 86-of-89 priceable tasks, a different exclusion set from the Opus 4.8 cut, so do **not** subtract the two rows from each other: different model, different task set, no controlled comparison. See [BENCHMARKS.md](BENCHMARKS.md#terminal-bench).</sub>
+<sub>Both arms: 445 trials on the same dataset, tied 351/445; LemonCrow sends 98.6% fewer fresh input tokens. Cost normalized to the 1-hour cache-write rate both sides, over the 86/89 priceable tasks. † Opus 5 row is LemonCrow-only — no official Claude Code + Opus 5 baseline exists, so it's not a controlled comparison with the row above (different model, different task set, different exclusion set); don't subtract the two. Full methodology in [BENCHMARKS.md](BENCHMARKS.md#terminal-bench).</sub>
 
 <p align="center">
   <img src="benchmarks/cost_vs_savings_scatter.svg" alt="LemonCrow vs baseline: dollars saved per run against baseline task cost" width="720">
@@ -172,7 +172,6 @@ is derived from implied hit rates, not confirmed in their docs.
 Cursor stores no local cache counters, so every hit
 rate is computed as 1 − billed/integral. Treat the caching mechanism as
 unproven; the CLI cost delta above is from Usage/token totals on the pinned run.
-
 ## Quick start
 
 The [two lines at the top](#lemoncrow-runtime) are the whole setup: the installer
@@ -446,6 +445,8 @@ It runs locally: files on your machine, no server, no seats.
 
 **Hosted LemonCrow is a separate, paid product** and is not in this repository:
 team workspaces shared across machines, shared context and memory, SSO, org-wide
-usage dashboards, retention and audit export, and support. For details Contact <legal@lemoncrow.com>.
+usage dashboards, retention and audit export, and support. The runtime stays
+open source — the service is what's sold. Interested, or want it run for you?
+Contact <legal@lemoncrow.com>.
 
 See [LICENSE](LICENSE) and [NOTICE](NOTICE).
