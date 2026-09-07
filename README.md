@@ -25,7 +25,7 @@ LemonCrow runs underneath Claude Code, Codex, and other supported hosts with a l
 [![Copilot](https://img.shields.io/badge/Copilot-supported-blue?style=flat-square)](integrations/copilot)
 [![Copilot CLI](https://img.shields.io/badge/Copilot_CLI-supported-blue?style=flat-square)](integrations/copilot-cli)
 
-[Results](#results) · [What it does](#what-lemoncrow-does) · [Quick start](#quick-start) · [Limitations](#what-lemoncrow-does-not-do) · [Privacy](#privacy-and-network-behavior) · [Removal](#removal)
+[Results](#results) · [Philosophy](#philosophy--optimize-the-journey-not-the-hop) · [What it does](#what-lemoncrow-does) · [Quick start](#quick-start) · [Limitations](#what-lemoncrow-does-not-do) · [Privacy](#privacy-and-network-behavior) · [Removal](#removal)
 
 </div>
 
@@ -92,6 +92,32 @@ full 13-tool retrieval comparison: [BENCHMARKS.md](BENCHMARKS.md#indexing-time).
 
 Reproduce any of this from committed raw data: see [BENCHMARKS.md](BENCHMARKS.md)
 and [docs/benchmarks/results.md](docs/benchmarks/results.md).
+
+## Philosophy — optimize the journey, not the hop
+
+The tooling around coding agents is fragmented by construction: a better index
+here, a context compressor there, a model router, a memory store, a reranker.
+Each one optimizes a single hop of the agent's loop — and, tellingly, each one
+benchmarks itself on that same hop.
+
+But a task is not a hop. It is a loop — find, read, act, carry, verify — run
+until the work is done or the budget is gone. Optimize one hop in isolation and
+the cost usually just relocates to the next one:
+
+- a retriever that returns more context makes the read cheap and the prompt expensive;
+- a compressor that shrinks the prompt makes the model re-ask, buying the tokens back as turns;
+- a router that picks the cheaper model saves per token and gives it back in retries;
+- a memory layer that remembers everything charges you for it on every later call.
+
+Every one of those wins its own benchmark. The bill doesn't move.
+
+LemonCrow takes the opposite bet: own every hop in one runtime, tune them
+against each other, and report the one number that can't be gamed by scope —
+absolute dollars per completed task, over whole runs, on task mixes we didn't
+hand-pick. That is why retrieval, exact-range reads, output bounding, memory,
+routing, and verification ship as one thing instead of five installables: the
+interactions between them are where the savings actually live, and a single-hop
+tool cannot see them.
 
 ## What LemonCrow does
 
