@@ -137,9 +137,18 @@ class _Server(ThreadingHTTPServer):
 
 
 def serve(directory: Path, *, host: str, port: int, api_url: str = DEFAULT_API_URL) -> None:
-    """Block serving ``directory`` on ``host:port``, proxying ``/api`` to ``api_url``."""
-    with _Server((host, port), _make_handler(directory, api_url)) as httpd:
+    """Block serving ``directory`` on ``host:port``, proxying ``/api`` to ``api_url``.
+
+    Explicit try/finally rather than ``with _Server(...)``: mypyc cannot resolve
+    the ``__enter__`` that ``_Server`` inherits from ``socketserver.BaseServer``
+    and aborts the release wheel build with an internal error
+    (``KeyError: "'_Server' has no attribute '__enter__'"``).
+    """
+    httpd = _Server((host, port), _make_handler(directory, api_url))
+    try:
         httpd.serve_forever()
+    finally:
+        httpd.server_close()
 
 
 def main(argv: list[str] | None = None) -> int:
